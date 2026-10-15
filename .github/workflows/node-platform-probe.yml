@@ -1,0 +1,107 @@
+name: Native Node Platform Probe
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/node-platform-probe.yml
+      - Cargo.toml
+      - Cargo.lock
+      - node/**
+      - casper/**
+      - comm/**
+      - crypto/**
+      - models/**
+      - rholang/**
+      - rspace++/**
+      - shared/**
+      - block-storage/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-platform-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: Native Node macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-14, arch: arm64 }
+          - { runner: macos-15-intel, arch: x86_64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: 2
+      RUST_MIN_STACK: 8388608
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
+        with:
+          toolchain: nightly-2026-02-09
+
+      - name: Install native dependencies
+        shell: bash -euo pipefail {0}
+        run: |
+          brew install protobuf openssl@3 pkg-config lmdb
+          printf 'OPENSSL_DIR=%s\n' "$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+
+      - name: Build and inspect node
+        shell: bash -euo pipefail {0}
+        run: |
+          case "$(uname -m)" in
+            arm64) export RUSTFLAGS='-C target-feature=+aes' ;;
+            x86_64) export RUSTFLAGS='-C target-feature=+aes,+sse2' ;;
+            *) exit 2 ;;
+          esac
+          cargo build --release --locked -p node --bin node
+          file target/release/node
+          otool -L target/release/node
+          target/release/node --version
+
+      - name: Upload node binary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: f1r3node-macos-${{ matrix.arch }}-probe
+          path: target/release/node
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    name: Native Node Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: 2
+      RUST_MIN_STACK: 8388608
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
+        with:
+          toolchain: nightly-2026-02-09
+
+      - name: Install protoc
+        shell: pwsh
+        run: |
+          choco install protoc -y --no-progress
+          protoc --version
+
+      - name: Check node
+        shell: pwsh
+        run: |
+          cargo check --locked -p node --bin node
