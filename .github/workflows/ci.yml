@@ -359,7 +359,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           ref: ${{ needs.build_base.outputs.TARGET_SHA }}
           persist-credentials: false
@@ -999,7 +999,7 @@ jobs:
 
       - name: Download coverage data
         continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: coverage-*
           path: /tmp/coverage
@@ -1075,6 +1075,94 @@ jobs:
       gated: false
       checkout_ref: ${{ needs.build_base.outputs.TARGET_SHA }}
     secrets: inherit
+
+  native_linux_packages:
+    name: Native Linux Packages (${{ matrix.arch }})
+    needs: [build_base, pipeline]
+    if: needs.build_base.outputs.RUN_HEAVY == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, arch: amd64, platform: linux/amd64, arch_image: "archlinux:base-devel" }
+          - { runner: ubuntu-24.04-arm, arch: arm64, platform: linux/arm64, arch_image: "menci/archlinuxarm:base-devel" }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.build_base.outputs.TARGET_SHA }}
+          persist-credentials: false
+
+      - name: Download tested image
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: artifacts-docker-${{ matrix.arch }}
+          path: ${{ runner.temp }}/node-image
+
+      - name: Extract tested binary
+        shell: bash -euo pipefail {0}
+        run: |
+          mkdir -p "$RUNNER_TEMP/native"
+          zcat "$RUNNER_TEMP/node-image/rust-node-docker.tar.gz" | docker image load
+          container="$(docker create --platform '${{ matrix.platform }}' "${DOCKER_IMAGE_NAME}:${{ matrix.arch }}")"
+          docker cp "$container:/opt/docker/bin/node" "$RUNNER_TEMP/native/f1r3node-linux-${{ matrix.arch }}"
+          docker rm "$container"
+          version="$(sed -n '/^\[package\]/,/^\[/{s/^version = "\([^"]*\)"/\1/p;}' node/Cargo.toml | head -n 1)"
+          sha="$(sha256sum "$RUNNER_TEMP/native/f1r3node-linux-${{ matrix.arch }}" | cut -d' ' -f1)"
+          printf 'NODE_VERSION=%s\nNODE_SHA256=%s\n' "$version" "$sha" >> "$GITHUB_ENV"
+
+      - name: Build and install DEB
+        shell: bash -euo pipefail {0}
+        run: |
+          packaging/linux/build.sh --format deb --version "$NODE_VERSION" --binary "$RUNNER_TEMP/native/f1r3node-linux-${{ matrix.arch }}" --sha256 "$NODE_SHA256" --out "$RUNNER_TEMP/native"
+          package="$RUNNER_TEMP/native/f1r3node_${NODE_VERSION}_${{ matrix.arch }}.deb"
+          packaging/linux/smoke.sh --format deb --package "$package" --version "$NODE_VERSION" --sha256 "$NODE_SHA256"
+          sudo apt-get install -y "$package"
+          [[ "$(f1r3node --version)" == "f1r3fly $NODE_VERSION" ]]
+          [[ "$(sha256sum /usr/bin/f1r3node | cut -d' ' -f1)" == "$NODE_SHA256" ]]
+          systemd-analyze verify /usr/lib/systemd/system/f1r3node.service
+          [[ "$(systemctl is-enabled f1r3node.service 2>/dev/null || true)" != enabled ]]
+          [[ "$(systemctl is-active f1r3node.service 2>/dev/null || true)" != active ]]
+          sudo apt-get remove -y f1r3node
+
+      - name: Build and smoke tar archive
+        shell: bash -euo pipefail {0}
+        run: |
+          packaging/linux/build.sh --format tar --version "$NODE_VERSION" --binary "$RUNNER_TEMP/native/f1r3node-linux-${{ matrix.arch }}" --sha256 "$NODE_SHA256" --out "$RUNNER_TEMP/native"
+          packaging/linux/smoke.sh --format tar --package "$RUNNER_TEMP/native/f1r3node-$NODE_VERSION-linux-$(uname -m).tar.gz" --version "$NODE_VERSION" --sha256 "$NODE_SHA256"
+
+      - name: Build and install Arch package
+        shell: bash -euo pipefail {0}
+        run: |
+          docker run --rm --platform '${{ matrix.platform }}' -v "$PWD:/src:ro" -v "$RUNNER_TEMP/native:/out" -e OUT=/out -w /src '${{ matrix.arch_image }}' packaging/linux/ci-arch.sh "$NODE_VERSION" "/out/f1r3node-linux-${{ matrix.arch }}" "$NODE_SHA256"
+
+      - name: Build and install RPM
+        shell: bash -euo pipefail {0}
+        run: |
+          docker run --rm --platform '${{ matrix.platform }}' -v "$PWD:/src:ro" -v "$RUNNER_TEMP/native:/out" -e OUT=/out -w /src fedora:43 packaging/linux/ci-rpm.sh "$NODE_VERSION" "/out/f1r3node-linux-${{ matrix.arch }}" "$NODE_SHA256"
+
+      - name: Upload tested native packages
+        shell: bash -euo pipefail {0}
+        run: |
+          cd "$RUNNER_TEMP/native"
+          sha256sum -- *.deb *.rpm *.pkg.tar.zst *.tar.gz | sort -k2 > native-packages.sha256
+          printf '%s\n' "$NODE_SHA256" > source-binary.sha256
+
+      - name: Publish tested native packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-linux-packages-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/native/*.deb
+            ${{ runner.temp }}/native/*.rpm
+            ${{ runner.temp }}/native/*.pkg.tar.zst
+            ${{ runner.temp }}/native/*.tar.gz
+            ${{ runner.temp }}/native/native-packages.sha256
+            ${{ runner.temp }}/native/source-binary.sha256
+          if-no-files-found: error
+          retention-days: 90
 
   # Per-arch aggregators. The branch ruleset requires the checks named
   # `Integration Gate (amd64)` / `(arm64)`. These collapse the reusable

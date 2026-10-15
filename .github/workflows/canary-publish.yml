@@ -170,6 +170,39 @@ jobs:
           test -s /tmp/candidate-artifacts/release/f1r3node-linux-amd64
           test -s /tmp/candidate-artifacts/release/f1r3node-linux-arm64
 
+      - name: Download tested native packages
+        if: steps.eligibility.outputs.eligible == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.ci_run_id || github.event.workflow_run.id }}
+          pattern: native-linux-packages-*
+          path: /tmp/candidate-artifacts
+
+      - name: Verify tested native packages
+        if: steps.eligibility.outputs.eligible == 'true'
+        shell: bash -euo pipefail {0}
+        run: |
+          assets="$RUNNER_TEMP/native-release-assets"
+          mkdir -p "$assets"
+          for arch in amd64 arm64; do
+            source="/tmp/candidate-artifacts/native-linux-packages-$arch"
+            test -f "$source/native-packages.sha256"
+            test -f "$source/source-binary.sha256"
+            binary_sha="$(sha256sum "/tmp/candidate-artifacts/release/f1r3node-linux-$arch" | cut -d' ' -f1)"
+            test "$(cat "$source/source-binary.sha256")" = "$binary_sha"
+            test "$(wc -l < "$source/native-packages.sha256")" -eq 4
+            (cd "$source" && sha256sum -c native-packages.sha256)
+            while read -r digest filename; do
+              [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+              [[ "$filename" =~ ^f1r3node[-_][A-Za-z0-9._-]+$ ]]
+              cp "$source/$filename" "$assets/$filename"
+            done < "$source/native-packages.sha256"
+          done
+          test "$(find "$assets" -maxdepth 1 -type f | wc -l)" -eq 8
+          (cd "$assets" && sha256sum -- *.deb *.rpm *.pkg.tar.zst *.tar.gz | sort -k2 > native-packages.sha256)
+
       - name: Generate candidate evidence
         id: evidence
         if: steps.eligibility.outputs.eligible == 'true'
@@ -255,6 +288,11 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --pattern 'release-evidence.json.sha256' \
             --pattern 'f1r3node-linux-*' \
+            --pattern 'native-packages.sha256' \
+            --pattern '*.deb' \
+            --pattern '*.rpm' \
+            --pattern '*.pkg.tar.zst' \
+            --pattern '*.tar.gz' \
             --dir "$RUNNER_TEMP/existing-release" || {
             echo "::error::Release ${CANDIDATE_TAG} is missing its checksum or binary assets; investigate before rerunning."
             exit 1
@@ -299,6 +337,9 @@ jobs:
               exit 1
             fi
           done
+          test -f "$RUNNER_TEMP/existing-release/native-packages.sha256"
+          cmp "$RUNNER_TEMP/native-release-assets/native-packages.sha256" "$RUNNER_TEMP/existing-release/native-packages.sha256"
+          (cd "$RUNNER_TEMP/existing-release" && sha256sum -c native-packages.sha256)
           # The recorded image index must still resolve and reference the
           # recorded architecture digests.
           index_ref="$(jq -r '.images.docker_hub' "$existing")"
@@ -467,6 +508,11 @@ jobs:
           mkdir -p "$assets_dir"
           cp /tmp/candidate-artifacts/release/f1r3node-linux-amd64 "$assets_dir/"
           cp /tmp/candidate-artifacts/release/f1r3node-linux-arm64 "$assets_dir/"
+          cp "$RUNNER_TEMP/native-release-assets/"*.deb "$assets_dir/"
+          cp "$RUNNER_TEMP/native-release-assets/"*.rpm "$assets_dir/"
+          cp "$RUNNER_TEMP/native-release-assets/"*.pkg.tar.zst "$assets_dir/"
+          cp "$RUNNER_TEMP/native-release-assets/"*.tar.gz "$assets_dir/"
+          cp "$RUNNER_TEMP/native-release-assets/native-packages.sha256" "$assets_dir/"
           cp "$RUNNER_TEMP/release-evidence/release-evidence.json" "$assets_dir/"
           cp "$RUNNER_TEMP/release-evidence/release-evidence.json.sha256" "$assets_dir/"
           (cd "$assets_dir" && sha256sum f1r3node-linux-amd64 f1r3node-linux-arm64 > checksums.txt)
@@ -479,6 +525,11 @@ jobs:
             "$assets_dir/f1r3node-linux-amd64" \
             "$assets_dir/f1r3node-linux-arm64" \
             "$assets_dir/checksums.txt" \
+            "$assets_dir/native-packages.sha256" \
+            "$assets_dir/"*.deb \
+            "$assets_dir/"*.rpm \
+            "$assets_dir/"*.pkg.tar.zst \
+            "$assets_dir/"*.tar.gz \
             "$assets_dir/release-evidence.json" \
             "$assets_dir/release-evidence.json.sha256"
 
