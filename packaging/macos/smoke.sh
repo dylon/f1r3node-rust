@@ -15,11 +15,18 @@ work=$(mktemp -d)
 service_installed=0
 cleanup() {
   local code=$?
+  if [[ "$code" != 0 ]]; then
+    if [[ -n "${data_dir:-}" && -f "$data_dir/launchd.log" ]]; then
+      tail -n 80 "$data_dir/launchd.log" >&2
+    fi
+    launchctl print "gui/$(id -u)/io.f1r3fly.f1r3node" >&2 || true
+  fi
   if [[ "$service_installed" == 1 ]]; then /usr/local/bin/f1r3node-service uninstall || true; fi
   rm -rf "$work"
   exit "$code"
 }
 trap cleanup EXIT
+trap 'printf "macOS package smoke failed at line %s: %s (status %s)\n" "$LINENO" "$BASH_COMMAND" "$?" >&2' ERR
 
 mkdir -p "$work/stage"
 tar -xzf "$archive" -C "$work/stage"
@@ -48,8 +55,10 @@ data_dir="$HOME/Library/Application Support/F1R3Node"
 mkdir -p "$data_dir"
 printf 'standalone = true\n' > "$data_dir/rnode.conf"
 printf 'preserve user data\n' > "$data_dir/package-smoke-sentinel"
+echo "Installing opt-in service"
 /usr/local/bin/f1r3node-service install
 service_installed=1
+echo "Checking service registration"
 /usr/local/bin/f1r3node-service status >/dev/null
 started=0
 for ((attempt = 0; attempt < 60; attempt++)); do
@@ -57,7 +66,9 @@ for ((attempt = 0; attempt < 60; attempt++)); do
   sleep 1
 done
 [[ "$started" == 1 ]] || { [[ ! -f "$data_dir/launchd.log" ]] || cat "$data_dir/launchd.log" >&2; echo "service did not start" >&2; exit 1; }
+echo "Stopping service"
 /usr/local/bin/f1r3node-service stop
+echo "Restarting service"
 /usr/local/bin/f1r3node-service start
 /usr/local/bin/f1r3node-service status >/dev/null
 restarted=0
