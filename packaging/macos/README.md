@@ -18,7 +18,9 @@ The build command accepts `--version`, `--arm64`, `--arm64-sha256`, `--x86_64`, 
 
 The script checks each binary's version, architecture, hash, and dynamic libraries. It creates a `.pkg`, a `.tar.gz`, and a SHA-256 manifest.
 
-GitHub CI builds both binaries and runs the package script. The CI job installs the package and checks an upgrade and service lifecycle.
+GitHub CI builds both binaries and uploads their SHA-256 digests. It installs the universal package on both architectures.
+
+The installation checks an upgrade, service startup and restart, and preservation of user data after service removal.
 
 ## Install and operate
 

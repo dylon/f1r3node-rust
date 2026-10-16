@@ -77,5 +77,5 @@ done
 
 archive="$out/f1r3node-$version-macos-universal.tar.gz"
 tar -czf "$archive" -C "$root" usr/local/bin/f1r3node usr/local/bin/f1r3node-service usr/local/share/f1r3node/launchd.plist usr/local/share/f1r3node/LICENSE.TXT
-shasum -a 256 "$pkg" "$archive" > "$out/f1r3node-$version-macos-universal.sha256"
+(cd "$out" && shasum -a 256 "$(basename "$pkg")" "$(basename "$archive")" > "f1r3node-$version-macos-universal.sha256")
 echo "built $pkg and $archive"

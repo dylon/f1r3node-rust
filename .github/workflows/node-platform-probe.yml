@@ -68,12 +68,15 @@ jobs:
           file target/release/node
           otool -L target/release/node
           target/release/node --version
+          (cd target/release && shasum -a 256 node > node.sha256)
 
       - name: Upload node binary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: f1r3node-macos-${{ matrix.arch }}-probe
-          path: target/release/node
+          path: |
+            target/release/node
+            target/release/node.sha256
           if-no-files-found: error
           retention-days: 7
 
@@ -103,6 +106,8 @@ jobs:
       - name: Build and install package
         shell: bash -euo pipefail {0}
         run: |
+          (cd artifacts/arm64 && shasum -a 256 -c node.sha256)
+          (cd artifacts/x86_64 && shasum -a 256 -c node.sha256)
           chmod +x artifacts/arm64/node artifacts/x86_64/node
           version="$(sed -n '/^\[package\]/,/^\[/{s/^version = "\([^"]*\)"/\1/p;}' node/Cargo.toml | head -n 1)"
           arm64_sha="$(shasum -a 256 artifacts/arm64/node | cut -d' ' -f1)"
@@ -117,6 +122,29 @@ jobs:
           path: dist/f1r3node-*-macos-universal.*
           if-no-files-found: error
           retention-days: 90
+
+  macos-intel-install:
+    name: Native Node macOS Intel Package Install
+    needs: macos-package
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Download universal package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: f1r3node-macos-universal-packages
+          path: dist
+
+      - name: Install and exercise package
+        shell: bash -euo pipefail {0}
+        run: |
+          version="$(sed -n '/^\[package\]/,/^\[/{s/^version = "\([^"]*\)"/\1/p;}' node/Cargo.toml | head -n 1)"
+          packaging/macos/smoke.sh "$version" dist
 
   windows:
     name: Native Node Windows x64

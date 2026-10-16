@@ -44,11 +44,23 @@ cmp "$binary" /usr/local/bin/f1r3node
 [[ "$(/usr/local/bin/f1r3node --version)" == "f1r3fly $version" ]]
 [[ ! -e "$HOME/Library/LaunchAgents/io.f1r3fly.f1r3node.plist" ]] || { echo "service started without opt-in" >&2; exit 2; }
 
+data_dir="$HOME/Library/Application Support/F1R3Node"
+mkdir -p "$data_dir"
+printf 'preserve user data\n' > "$data_dir/package-smoke-sentinel"
 /usr/local/bin/f1r3node-service install
 service_installed=1
 /usr/local/bin/f1r3node-service status >/dev/null
+started=0
+for ((attempt = 0; attempt < 30; attempt++)); do
+  if pgrep -f '^/usr/local/bin/f1r3node run --data-dir=' >/dev/null; then started=1; break; fi
+  sleep 1
+done
+[[ "$started" == 1 ]] || { cat "$data_dir/launchd.log" >&2; echo "service did not start" >&2; exit 1; }
 /usr/local/bin/f1r3node-service stop
+/usr/local/bin/f1r3node-service start
+/usr/local/bin/f1r3node-service status >/dev/null
 /usr/local/bin/f1r3node-service uninstall
 service_installed=0
 [[ ! -e "$HOME/Library/LaunchAgents/io.f1r3fly.f1r3node.plist" ]]
+[[ "$(cat "$data_dir/package-smoke-sentinel")" == 'preserve user data' ]]
 echo "macOS package smoke passed"
