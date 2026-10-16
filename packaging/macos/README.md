@@ -26,11 +26,16 @@ The installation checks an upgrade, service startup and restart, and preservatio
 
 1. Open the component `.pkg` to install the node command.
 2. Run `f1r3node --version` to check the installation.
-3. Run `f1r3node-service install` to enable and start the per-user service.
-4. Run `f1r3node-service status` to inspect the service.
-5. Run `f1r3node-service stop` to stop the service for the current login session.
-6. Run `f1r3node-service start` to start the service again.
-7. Run `f1r3node-service uninstall` to remove the per-user service.
+3. Create `~/Library/Application Support/F1R3Node/rnode.conf` with a standalone or bootstrap configuration.
+4. Run `f1r3node-service install` to enable and start the per-user service.
+5. Run `f1r3node-service status` to inspect the service.
+6. Run `f1r3node-service stop` to stop the service for the current login session.
+7. Run `f1r3node-service start` to start the service again.
+8. Run `f1r3node-service uninstall` to remove the per-user service.
+
+For an isolated local node, set `standalone = true` in `rnode.conf`.
+
+For an existing network, set `protocol-client.bootstrap` to a valid `rnode://` peer. Use the network operator's configuration values.
 
 The service stores data in `~/Library/Application Support/F1R3Node`. It binds the API to `127.0.0.1`.
 

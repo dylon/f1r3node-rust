@@ -10,6 +10,7 @@ data_dir="$HOME/Library/Application Support/F1R3Node"
 case "${1:-}" in
   install)
     [[ ! -e "$agent" ]] || { echo "service is already installed" >&2; exit 2; }
+    [[ -s "$data_dir/rnode.conf" ]] || { echo "create $data_dir/rnode.conf with a standalone or bootstrap configuration before enabling the service" >&2; exit 2; }
     mkdir -p "$(dirname "$agent")" "$data_dir"
     cp "$template" "$agent"
     if ! launchctl bootstrap "$domain" "$agent"; then

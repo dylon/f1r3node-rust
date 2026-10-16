@@ -49,16 +49,17 @@ pub mod builder {
             .subcommand
             .as_ref()
             .and_then(|subcommand| match &subcommand {
-                &commandline::options::OptionsSubCommand::Run(run_options) => Some((
-                    run_options
+                &commandline::options::OptionsSubCommand::Run(run_options) => {
+                    let data_dir = run_options
                         .data_dir
                         .clone()
-                        .unwrap_or_else(|| profile.data_dir.0.clone()),
-                    run_options
+                        .unwrap_or_else(|| profile.data_dir.0.clone());
+                    let config_file = run_options
                         .config_file
                         .clone()
-                        .unwrap_or_else(|| profile.data_dir.0.join("rnode.conf")),
-                )),
+                        .unwrap_or_else(|| data_dir.join("rnode.conf"));
+                    Some((data_dir, config_file))
+                }
                 _ => None,
             })
             .unwrap_or_else(|| {
@@ -582,9 +583,28 @@ mod heartbeat_conf_hocon_tests {
 mod embedded_defaults_tests {
     use std::time::Duration;
 
+    use clap::Parser;
     use shared::rust::tracing_init::{LogFormat, LogRotation, LogSink};
 
     use super::*;
+
+    #[test]
+    fn data_dir_override_loads_its_config_file() {
+        let dir = tempfile::tempdir().expect("create data directory");
+        let config_file = dir.path().join("rnode.conf");
+        std::fs::write(&config_file, "standalone = true\n").expect("write config file");
+        let options = Options::try_parse_from([
+            "node",
+            "run",
+            "--data-dir",
+            dir.path().to_str().expect("UTF-8 test path"),
+        ])
+        .expect("parse options");
+
+        let (config, _, loaded_file, _) = builder::build(options).expect("load node config");
+        assert_eq!(loaded_file.as_deref(), Some(config_file.as_path()));
+        assert!(config.standalone);
+    }
 
     #[test]
     fn embedded_defaults_deserialize_into_node_conf() {

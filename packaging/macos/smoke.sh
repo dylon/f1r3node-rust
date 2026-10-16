@@ -46,19 +46,26 @@ cmp "$binary" /usr/local/bin/f1r3node
 
 data_dir="$HOME/Library/Application Support/F1R3Node"
 mkdir -p "$data_dir"
+printf 'standalone = true\n' > "$data_dir/rnode.conf"
 printf 'preserve user data\n' > "$data_dir/package-smoke-sentinel"
 /usr/local/bin/f1r3node-service install
 service_installed=1
 /usr/local/bin/f1r3node-service status >/dev/null
 started=0
-for ((attempt = 0; attempt < 30; attempt++)); do
-  if pgrep -f '^/usr/local/bin/f1r3node run --data-dir=' >/dev/null; then started=1; break; fi
+for ((attempt = 0; attempt < 60; attempt++)); do
+  if [[ -f "$data_dir/launchd.log" ]] && grep -Fq 'All tasks started. Node is now running.' "$data_dir/launchd.log" && pgrep -f '^/usr/local/bin/f1r3node run --data-dir=' >/dev/null && curl --fail --silent --show-error --max-time 2 http://127.0.0.1:40403/status >/dev/null 2>&1; then started=1; break; fi
   sleep 1
 done
-[[ "$started" == 1 ]] || { cat "$data_dir/launchd.log" >&2; echo "service did not start" >&2; exit 1; }
+[[ "$started" == 1 ]] || { [[ ! -f "$data_dir/launchd.log" ]] || cat "$data_dir/launchd.log" >&2; echo "service did not start" >&2; exit 1; }
 /usr/local/bin/f1r3node-service stop
 /usr/local/bin/f1r3node-service start
 /usr/local/bin/f1r3node-service status >/dev/null
+restarted=0
+for ((attempt = 0; attempt < 60; attempt++)); do
+  if pgrep -f '^/usr/local/bin/f1r3node run --data-dir=' >/dev/null && curl --fail --silent --show-error --max-time 2 http://127.0.0.1:40403/status >/dev/null 2>&1; then restarted=1; break; fi
+  sleep 1
+done
+[[ "$restarted" == 1 ]] || { cat "$data_dir/launchd.log" >&2; echo "service did not restart" >&2; exit 1; }
 /usr/local/bin/f1r3node-service uninstall
 service_installed=0
 [[ ! -e "$HOME/Library/LaunchAgents/io.f1r3fly.f1r3node.plist" ]]

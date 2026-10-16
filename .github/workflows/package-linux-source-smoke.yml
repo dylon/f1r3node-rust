@@ -79,6 +79,23 @@ jobs:
           systemd-analyze verify /usr/lib/systemd/system/f1r3node.service
           [[ "$(systemctl is-enabled f1r3node.service 2>/dev/null || true)" != enabled ]]
           [[ "$(systemctl is-active f1r3node.service 2>/dev/null || true)" != active ]]
+          sudo install -d -m 0700 /var/lib/f1r3node
+          printf 'standalone = true\n' | sudo tee /var/lib/f1r3node/rnode.conf >/dev/null
+          if ! sudo systemctl start f1r3node.service; then
+            sudo journalctl -u f1r3node.service --no-pager -n 100
+            exit 1
+          fi
+          ready=0
+          for ((attempt = 0; attempt < 60; attempt++)); do
+            if systemctl is-active --quiet f1r3node.service && curl --fail --silent --show-error --max-time 2 http://127.0.0.1:40403/status >/dev/null 2>&1; then ready=1; break; fi
+            sleep 1
+          done
+          if [[ "$ready" != 1 ]]; then
+            sudo journalctl -u f1r3node.service --no-pager -n 100
+            exit 1
+          fi
+          sudo systemctl stop f1r3node.service
+          sudo test -s /var/lib/f1r3node/rnode.conf
           sudo apt-get remove -y f1r3node
 
       - name: Build and smoke tar archive

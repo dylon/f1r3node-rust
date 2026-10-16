@@ -147,7 +147,8 @@ jobs:
           packaging/macos/smoke.sh "$version" dist
 
   windows:
-    name: Native Node Windows x64
+    name: Native Node Windows x64 Diagnostic
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-2022
     timeout-minutes: 120
     env:

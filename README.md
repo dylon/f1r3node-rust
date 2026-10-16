@@ -85,7 +85,7 @@ macOS:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-brew install protobuf openssl pkg-config lmdb just grpcurl
+brew install protobuf pkg-config lmdb just grpcurl
 ```
 
 Ubuntu or Debian:
@@ -98,6 +98,12 @@ cargo install just
 ```
 
 `rust-toolchain.toml` pins the workspace to `nightly-2026-02-09`.
+
+Native Windows builds are not supported yet. The Rholang filesystem quarantine requires Unix file descriptor operations.
+
+The `Native Node Platform Probe` workflow contains a manual Windows build diagnostic. It can run after the workflow reaches the default branch.
+
+The diagnostic reports the source portability work needed before a Windows Node installer is possible.
 
 ### Git Hooks (Required)
 
