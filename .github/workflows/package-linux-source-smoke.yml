@@ -86,7 +86,23 @@ jobs:
           packaging/linux/build.sh --format deb --version "$NODE_VERSION" --binary target/release/node --sha256 "$NODE_SHA256" --out "$RUNNER_TEMP/native"
           package="$RUNNER_TEMP/native/f1r3node_${NODE_VERSION}_${{ matrix.arch }}.deb"
           packaging/linux/smoke.sh --format deb --package "$package" --version "$NODE_VERSION" --sha256 "$NODE_SHA256"
+          IFS=. read -r major minor patch <<< "$NODE_VERSION"
+          if ((patch > 0)); then older="$major.$minor.$((patch - 1))"
+          elif ((minor > 0)); then older="$major.$((minor - 1)).1"
+          elif ((major > 0)); then older="$((major - 1)).1.1"
+          else exit 2
+          fi
+          work=$(mktemp -d)
+          dpkg-deb -R "$package" "$work/stage"
+          sed -i "s/^Version: .*/Version: $older/" "$work/stage/DEBIAN/control"
+          dpkg-deb --root-owner-group --build "$work/stage" "$work/older.deb"
+          sudo install -d -m 0700 /var/lib/f1r3node
+          printf 'preserve package state\n' | sudo tee /var/lib/f1r3node/package-smoke-sentinel >/dev/null
+          sudo apt-get install -y "$work/older.deb"
+          [[ "$(dpkg-query -W -f='${Version}' f1r3node)" == "$older" ]]
           sudo apt-get install -y "$package"
+          [[ "$(dpkg-query -W -f='${Version}' f1r3node)" == "$NODE_VERSION" ]]
+          sudo test -s /var/lib/f1r3node/package-smoke-sentinel
           [[ "$(f1r3node --version)" == "f1r3fly $NODE_VERSION" ]]
           [[ "$(sha256sum /usr/bin/f1r3node | cut -d' ' -f1)" == "$NODE_SHA256" ]]
           systemd-analyze verify /usr/lib/systemd/system/f1r3node.service
@@ -110,6 +126,7 @@ jobs:
           sudo systemctl stop f1r3node.service
           sudo test -s /var/lib/f1r3node/rnode.conf
           sudo apt-get remove -y f1r3node
+          sudo test -s /var/lib/f1r3node/package-smoke-sentinel
 
       - name: Build and smoke tar archive
         shell: bash -euo pipefail {0}
