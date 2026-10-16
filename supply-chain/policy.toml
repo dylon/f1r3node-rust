@@ -9,6 +9,18 @@ x86_64-apple-darwin = "248da7f581724e470071990c088ffc55c811981715f4cbdb258621fb7
 aarch64-unknown-linux-musl = "995c82be0defc7a025cae49a2aa2644ce8245c9a3318fc4103907c6a285e8c7d"
 x86_64-unknown-linux-musl = "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
 
+[exceptions."zip@0.6.6"]
+package = "zip"
+versions = ["0.6.6"]
+owner = "@F1R3FLY-io/ci-maintainers"
+review-by = 2026-11-05
+
+[exceptions."zip@3.0.0"]
+package = "zip"
+versions = ["3.0.0"]
+owner = "@F1R3FLY-io/ci-maintainers"
+review-by = 2026-11-05
+
 [exceptions.RUSTSEC-2026-0258]
 package = "h2"
 versions = ["0.3.27"]

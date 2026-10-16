@@ -32,7 +32,7 @@ cp "$project/packaging/linux/arch/PKGBUILD" /tmp/node-arch-output/PKGBUILD
 runuser -u node-builder -- env F1R3NODE_BINARY="$binary" F1R3NODE_SOURCE="$project" F1R3NODE_VERSION="$older" \
   PKGDEST=/tmp/node-arch-output SRCDEST=/tmp/node-arch-output BUILDDIR=/tmp/node-arch-output \
   bash -c 'cd /tmp/node-arch-output && makepkg --nodeps --noconfirm --force'
-older_package=/tmp/node-arch-output/f1r3node-$older-1-$arch.pkg.tar.zst
+older_package=$(find /tmp/node-arch-output -maxdepth 1 -type f -name "f1r3node-$older-1-$arch.pkg.tar.*" -print -quit)
 [[ -s "$older_package" ]]
 install -d -m 0700 /var/lib/f1r3node
 printf 'preserve package state\n' > /var/lib/f1r3node/package-smoke-sentinel
