@@ -13,7 +13,7 @@ on:
       - crypto/**
       - models/**
       - rholang/**
-      - rspace++/**
+      - 'rspace\+\+/**'
       - shared/**
       - block-storage/**
   workflow_dispatch:
