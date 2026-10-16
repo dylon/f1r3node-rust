@@ -112,6 +112,9 @@ pub mod builder {
 
         // override config values with CLI options
         node_conf.override_config_values(options);
+        if node_conf.standalone {
+            node_conf.casper.genesis_ceremony.ceremony_master_mode = true;
+        }
 
         // Validate configuration, collecting non-fatal warnings to emit
         // after the tracing subscriber is installed.
@@ -604,6 +607,7 @@ mod embedded_defaults_tests {
         let (config, _, loaded_file, _) = builder::build(options).expect("load node config");
         assert_eq!(loaded_file.as_deref(), Some(config_file.as_path()));
         assert!(config.standalone);
+        assert!(config.casper.genesis_ceremony.ceremony_master_mode);
     }
 
     #[test]
