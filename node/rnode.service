@@ -8,6 +8,7 @@ Type=simple
 DynamicUser=yes
 StateDirectory=f1r3node
 StateDirectoryMode=0700
+Environment=RUST_MIN_STACK=8388608
 ExecStart=/usr/bin/f1r3node run --data-dir=/var/lib/f1r3node --api-host=127.0.0.1 --no-upnp
 Restart=on-failure
 RestartSec=5s

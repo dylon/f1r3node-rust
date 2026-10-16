@@ -58,5 +58,6 @@ license=$work/usr/share/licenses/f1r3node/LICENSE.TXT
 [[ "$("$binary" --version)" == "f1r3fly $version" ]] || { echo "packaged binary version mismatch" >&2; exit 2; }
 grep -Fx 'DynamicUser=yes' "$unit" >/dev/null
 grep -Fx 'StateDirectory=f1r3node' "$unit" >/dev/null
+grep -Fx 'Environment=RUST_MIN_STACK=8388608' "$unit" >/dev/null
 grep -F 'ExecStart=/usr/bin/f1r3node run --data-dir=/var/lib/f1r3node --api-host=127.0.0.1' "$unit" >/dev/null
 echo "smoke passed: $package"
