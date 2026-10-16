@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+label=io.f1r3fly.f1r3node
+agent="$HOME/Library/LaunchAgents/$label.plist"
+template=/usr/local/share/f1r3node/launchd.plist
+domain="gui/$(id -u)"
+data_dir="$HOME/Library/Application Support/F1R3Node"
+
+case "${1:-}" in
+  install)
+    [[ ! -e "$agent" ]] || { echo "service is already installed" >&2; exit 2; }
+    mkdir -p "$(dirname "$agent")" "$data_dir"
+    cp "$template" "$agent"
+    if ! launchctl bootstrap "$domain" "$agent"; then
+      rm -f "$agent"
+      exit 1
+    fi
+    ;;
+  start)
+    [[ -f "$agent" ]] || { echo "install the service first" >&2; exit 2; }
+    if launchctl print "$domain/$label" >/dev/null 2>&1; then
+      launchctl kickstart -k "$domain/$label"
+    else
+      launchctl bootstrap "$domain" "$agent"
+    fi
+    ;;
+  stop)
+    launchctl bootout "$domain/$label"
+    ;;
+  status)
+    launchctl print "$domain/$label"
+    ;;
+  uninstall)
+    [[ -f "$agent" ]] || { echo "service is not installed" >&2; exit 2; }
+    if launchctl print "$domain/$label" >/dev/null 2>&1; then
+      launchctl bootout "$domain/$label"
+    fi
+    rm -f "$agent"
+    ;;
+  run)
+    mkdir -p "$data_dir"
+    exec /usr/local/bin/f1r3node run --data-dir="$data_dir" --api-host=127.0.0.1 --no-upnp >> "$data_dir/launchd.log" 2>&1
+    ;;
+  *)
+    echo "usage: f1r3node-service install|start|stop|status|uninstall" >&2
+    exit 2
+    ;;
+esac

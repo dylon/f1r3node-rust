@@ -11,6 +11,7 @@ on:
       - casper/**
       - comm/**
       - crypto/**
+      - packaging/macos/**
       - models/**
       - rholang/**
       - 'rspace\+\+/**'
@@ -53,8 +54,7 @@ jobs:
       - name: Install native dependencies
         shell: bash -euo pipefail {0}
         run: |
-          brew install protobuf openssl@3 pkg-config lmdb
-          printf 'OPENSSL_DIR=%s\n' "$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          brew install protobuf pkg-config lmdb
 
       - name: Build and inspect node
         shell: bash -euo pipefail {0}
@@ -76,6 +76,47 @@ jobs:
           path: target/release/node
           if-no-files-found: error
           retention-days: 7
+
+  macos-package:
+    name: Native Node macOS Package and Install
+    needs: macos
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Download arm64 binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: f1r3node-macos-arm64-probe
+          path: artifacts/arm64
+
+      - name: Download x86_64 binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: f1r3node-macos-x86_64-probe
+          path: artifacts/x86_64
+
+      - name: Build and install package
+        shell: bash -euo pipefail {0}
+        run: |
+          chmod +x artifacts/arm64/node artifacts/x86_64/node
+          version="$(sed -n '/^\[package\]/,/^\[/{s/^version = "\([^"]*\)"/\1/p;}' node/Cargo.toml | head -n 1)"
+          arm64_sha="$(shasum -a 256 artifacts/arm64/node | cut -d' ' -f1)"
+          x86_64_sha="$(shasum -a 256 artifacts/x86_64/node | cut -d' ' -f1)"
+          packaging/macos/build.sh --version "$version" --arm64 artifacts/arm64/node --arm64-sha256 "$arm64_sha" --x86_64 artifacts/x86_64/node --x86_64-sha256 "$x86_64_sha" --out dist
+          packaging/macos/smoke.sh "$version" dist
+
+      - name: Upload macOS packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: f1r3node-macos-universal-packages
+          path: dist/f1r3node-*-macos-universal.*
+          if-no-files-found: error
+          retention-days: 90
 
   windows:
     name: Native Node Windows x64

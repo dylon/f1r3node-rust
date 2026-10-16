@@ -41,6 +41,11 @@ x509-certificate = "0.23"
 yasna = { version = "0.5.2", features = ["num-bigint"] }
 eyre = { workspace = true }
 pem = "3.0"
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+
+[target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
 openssl = "0.10"
 
 [dev-dependencies]
