@@ -5,8 +5,21 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - .github/workflows/package-linux-source-smoke.yml
+      - .github/scripts/install-system-dependencies.sh
+      - .cargo/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
       - packaging/linux/**
-      - node/rnode.service
+      - node/**
+      - casper/**
+      - comm/**
+      - crypto/**
+      - models/**
+      - rholang/**
+      - 'rspace\+\+/**'
+      - shared/**
+      - block-storage/**
   workflow_dispatch:
 
 permissions:

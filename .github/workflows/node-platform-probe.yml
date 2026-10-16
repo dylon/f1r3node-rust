@@ -5,8 +5,10 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - .github/workflows/node-platform-probe.yml
+      - .cargo/**
       - Cargo.toml
       - Cargo.lock
+      - rust-toolchain.toml
       - node/**
       - casper/**
       - comm/**
