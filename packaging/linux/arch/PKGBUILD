@@ -1,0 +1,19 @@
+pkgname=f1r3node
+pkgver=${F1R3NODE_VERSION:?set F1R3NODE_VERSION}
+pkgrel=1
+pkgdesc='F1R3Node blockchain service and command-line client'
+arch=('x86_64' 'aarch64')
+url='https://github.com/F1R3FLY-io/f1r3node-rust'
+license=('Apache-2.0')
+depends=('glibc' 'gcc-libs' 'openssl' 'zlib' 'brotli' 'zstd' 'systemd')
+source=()
+sha256sums=()
+options=('!debug' '!strip')
+
+package() {
+  local root="${F1R3NODE_SOURCE:?set F1R3NODE_SOURCE}"
+  local binary="${F1R3NODE_BINARY:?set F1R3NODE_BINARY}"
+  install -Dm755 "$binary" "$pkgdir/usr/bin/f1r3node"
+  install -Dm644 "$root/node/rnode.service" "$pkgdir/usr/lib/systemd/system/f1r3node.service"
+  install -Dm644 "$root/LICENSE.TXT" "$pkgdir/usr/share/licenses/f1r3node/LICENSE.TXT"
+}

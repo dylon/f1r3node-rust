@@ -27,6 +27,9 @@ fn today() -> NaiveDate { NaiveDate::from_ymd_opt(2026, 9, 6).unwrap() }
 fn advisory() -> Value {
     json!({"type":"diagnostic","fields":{"severity":"note","advisory":{"id":"RUSTSEC-2026-0258"},"graphs":[{"Krate":{"name":"h2","version":"0.3.27"}}]}})
 }
+fn yanked() -> Value {
+    json!({"type":"diagnostic","fields":{"severity":"note","code":"yanked-ignored","labels":[{"message":"yanked ignore","span":"zip@0.6.6"}],"graphs":[{"Krate":{"name":"zip","version":"0.6.6"}}]}})
+}
 fn report(records: &[Value]) -> String {
     let summary: serde_json::Map<_, _> = CHECKS
         .into_iter()
@@ -201,6 +204,24 @@ fn ignored_advisories_require_matching_review_records_and_reasons() {
 }
 
 #[test]
+fn yanked_exceptions_require_exact_reviewed_crate_versions() {
+    let mut p = policy();
+    p.exceptions.get_mut("zip@0.6.6").unwrap().versions = vec!["0.6.5".into()];
+    assert!(policy::validate(&p, &deny(), today()).is_err());
+
+    let mut d = deny();
+    d["advisories"]["ignore"][0]["crate"] = toml::Value::String("zip@0.6".into());
+    assert!(policy::validate(&policy(), &d, today()).is_err());
+
+    let mut d = deny();
+    d["advisories"]["ignore"][0]
+        .as_table_mut()
+        .unwrap()
+        .insert("id".into(), toml::Value::String("RUSTSEC-0000-0000".into()));
+    assert!(policy::validate(&policy(), &d, today()).is_err());
+}
+
+#[test]
 fn weakened_controls_are_rejected() {
     for (section, key, value) in [
         ("graph", "all-features", toml::Value::Boolean(false)),
@@ -352,6 +373,32 @@ fn reports_accept_only_reviewed_package_versions() {
         .is_empty());
     let mut wrong = advisory();
     wrong["fields"]["graphs"][0]["Krate"]["name"] = json!("other");
+    assert!(!report::validate(&report(&[wrong]), &p.exceptions)
+        .errors
+        .is_empty());
+}
+
+#[test]
+fn yanked_reports_require_matching_reviewed_package_evidence() {
+    let p = policy();
+    let accepted = report::validate(&report(&[yanked()]), &p.exceptions);
+    assert!(accepted.errors.is_empty());
+    assert!(accepted.encountered.contains("zip@0.6.6"));
+
+    let mut wrong = yanked();
+    wrong["fields"]["graphs"][0]["Krate"]["version"] = json!("0.6.5");
+    assert!(!report::validate(&report(&[wrong]), &p.exceptions)
+        .errors
+        .is_empty());
+
+    let mut wrong = yanked();
+    wrong["fields"]["labels"][0]["span"] = json!("zip@0.6.5");
+    assert!(!report::validate(&report(&[wrong]), &p.exceptions)
+        .errors
+        .is_empty());
+
+    let mut wrong = yanked();
+    wrong["fields"]["labels"] = json!([]);
     assert!(!report::validate(&report(&[wrong]), &p.exceptions)
         .errors
         .is_empty());

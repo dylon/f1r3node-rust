@@ -364,6 +364,40 @@ jobs:
           ci-control/.github/scripts/promote-release.sh verify-binaries \
             "$RUNNER_TEMP/promotion-plan.json" "$RUNNER_TEMP/binaries"
 
+      - name: Download candidate native packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_TAG: ${{ needs.gates.outputs.candidate_tag }}
+        shell: bash -euo pipefail {0}
+        run: |
+          packages="$RUNNER_TEMP/native-packages"
+          mkdir -p "$packages"
+          gh release download "$CANDIDATE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'native-packages.sha256' \
+            --pattern '*.deb' \
+            --pattern '*.rpm' \
+            --pattern '*.pkg.tar.zst' \
+            --pattern '*.tar.gz' \
+            --dir "$packages"
+          test "$(wc -l < "$packages/native-packages.sha256")" -eq 8
+          (cd "$packages" && sha256sum -c native-packages.sha256)
+          stable_tag="$(jq -r '.stable_tag' "$RUNNER_TEMP/promotion-plan.json")"
+          if [ "$(jq -r '.actions.create_release' "$RUNNER_TEMP/promotion-plan.json")" = false ]; then
+            existing="$RUNNER_TEMP/existing-native-packages"
+            mkdir -p "$existing"
+            gh release download "$stable_tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern 'native-packages.sha256' \
+              --pattern '*.deb' \
+              --pattern '*.rpm' \
+              --pattern '*.pkg.tar.zst' \
+              --pattern '*.tar.gz' \
+              --dir "$existing"
+            cmp "$packages/native-packages.sha256" "$existing/native-packages.sha256"
+            (cd "$existing" && sha256sum -c native-packages.sha256)
+          fi
+
       - name: Create immutable stable tag
         if: steps.plan.outputs.create_tag == 'true'
         env:
@@ -425,6 +459,11 @@ jobs:
           assets="$RUNNER_TEMP/stable-assets"
           mkdir -p "$assets"
           cp "$RUNNER_TEMP/binaries/"f1r3node-linux-* "$assets/"
+          cp "$RUNNER_TEMP/native-packages/"*.deb "$assets/"
+          cp "$RUNNER_TEMP/native-packages/"*.rpm "$assets/"
+          cp "$RUNNER_TEMP/native-packages/"*.pkg.tar.zst "$assets/"
+          cp "$RUNNER_TEMP/native-packages/"*.tar.gz "$assets/"
+          cp "$RUNNER_TEMP/native-packages/native-packages.sha256" "$assets/"
           (cd "$assets" && sha256sum f1r3node-linux-amd64 f1r3node-linux-arm64 > checksums.txt)
           ci-control/.github/scripts/promote-release.sh stable-evidence \
             "$plan" "$STABLE_DIGEST" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -441,6 +480,11 @@ jobs:
             "$assets/f1r3node-linux-amd64" \
             "$assets/f1r3node-linux-arm64" \
             "$assets/checksums.txt" \
+            "$assets/native-packages.sha256" \
+            "$assets/"*.deb \
+            "$assets/"*.rpm \
+            "$assets/"*.pkg.tar.zst \
+            "$assets/"*.tar.gz \
             "$assets/release-evidence.json" \
             "$assets/gate-report.json" \
             "$assets/stable-release-evidence.json" \

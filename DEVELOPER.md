@@ -14,7 +14,7 @@ The formal-verification gates need more tools. See [Formal Verification Tooling]
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source ~/.cargo/env
 
-brew install protobuf openssl pkg-config lmdb just grpcurl ruby jq
+brew install protobuf pkg-config lmdb just grpcurl ruby jq
 ```
 
 Optional:
@@ -279,12 +279,9 @@ which protoc
 export PROTOC=$(which protoc)
 ```
 
-### OpenSSL Not Found On macOS
+### OpenSSL On macOS
 
-```bash
-export OPENSSL_INCLUDE_DIR=$(brew --prefix openssl)/include
-export OPENSSL_LIB_DIR=$(brew --prefix openssl)/lib
-```
+The `crypto` crate builds OpenSSL from source on macOS. Leave `OPENSSL_DIR`, `OPENSSL_INCLUDE_DIR`, `OPENSSL_LIB_DIR`, and `OPENSSL_NO_VENDOR` unset for release builds.
 
 ### Stack Overflow In Debug Tests
 

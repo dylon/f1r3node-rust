@@ -116,7 +116,8 @@ plan() {
 		# object). A partial release stops promotion for investigation.
 		jq -e '.stable_release.assets as $a
 			| ["f1r3node-linux-amd64", "f1r3node-linux-arm64", "checksums.txt", "release-evidence.json",
-			   "gate-report.json", "stable-release-evidence.json", "stable-release-evidence.json.sha256"]
+			   "gate-report.json", "stable-release-evidence.json", "stable-release-evidence.json.sha256",
+			   "native-packages.sha256"]
 			| all(. as $n | $a | index($n) != null)' "$state" >/dev/null ||
 			fail "stable release $stable_tag exists but is missing required assets; investigate before rerunning"
 	fi
