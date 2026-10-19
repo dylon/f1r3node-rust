@@ -218,7 +218,7 @@ jobs:
             [[ ! -f "$data_dir/launchd.log" ]] || tail -n 100 "$data_dir/launchd.log"
             exit 1
           fi
-          F1R3NODE_BASE_URL=http://127.0.0.1:40403 \
+          RUSTFLAGS='' F1R3NODE_BASE_URL=http://127.0.0.1:40403 \
             cargo test --manifest-path gaze-source/f1r3-work/f1r3gaze/Cargo.toml \
               --locked -p gaze-shard --test live_node -- --ignored
           gaze_version=$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\([^"]*\)"/\1/p;}' gaze-source/f1r3-work/f1r3gaze/Cargo.toml | head -n 1)
