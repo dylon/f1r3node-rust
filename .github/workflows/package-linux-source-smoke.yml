@@ -43,6 +43,9 @@ jobs:
     env:
       CARGO_BUILD_JOBS: 2
       RUST_MIN_STACK: 8388608
+      GAZE_COMPAT_REPOSITORY: ${{ vars.GAZE_COMPAT_REPOSITORY || format('{0}/F1R3Gaze', github.repository_owner) }}
+      GAZE_COMPAT_REF: ${{ vars.GAZE_COMPAT_REF || 'main' }}
+      NODE_DEB_ARCH: ${{ matrix.arch }}
     steps:
       - name: Checkout source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -128,6 +131,60 @@ jobs:
           sudo apt-get remove -y f1r3node
           sudo test -s /var/lib/f1r3node/package-smoke-sentinel
 
+      - name: Checkout Gaze for live compatibility smoke
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          repository: ${{ env.GAZE_COMPAT_REPOSITORY }}
+          ref: ${{ env.GAZE_COMPAT_REF }}
+          path: gaze-source
+          persist-credentials: false
+
+      - name: Test packaged Node with Gaze client
+        shell: bash -euo pipefail {0}
+        timeout-minutes: 20
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          package="$RUNNER_TEMP/native/f1r3node_${NODE_VERSION}_${NODE_DEB_ARCH}.deb"
+          cleanup() {
+            if systemctl is-active --quiet f1r3node.service; then
+              sudo systemctl stop f1r3node.service
+            fi
+            if dpkg-query -W f1r3node >/dev/null 2>&1; then
+              sudo apt-get remove -y f1r3node
+            fi
+          }
+          trap cleanup EXIT
+          sudo apt-get install -y "$package"
+          sudo install -d -m 0700 /var/lib/f1r3node
+          printf 'standalone = true\n' | sudo tee /var/lib/f1r3node/rnode.conf >/dev/null
+          sudo systemctl start f1r3node.service
+          ready=0
+          for ((attempt = 0; attempt < 60; attempt++)); do
+            if systemctl is-active --quiet f1r3node.service && curl --fail --silent --show-error --max-time 2 http://127.0.0.1:40403/status >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != 1 ]]; then
+            sudo journalctl -u f1r3node.service --no-pager -n 100
+            exit 1
+          fi
+          F1R3NODE_BASE_URL=http://127.0.0.1:40403 \
+            cargo +1.95.0 test --manifest-path gaze-source/f1r3-work/f1r3gaze/Cargo.toml \
+              --locked -p gaze-shard --test live_node -- --ignored
+          gaze_version=$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\([^"]*\)"/\1/p;}' gaze-source/f1r3-work/f1r3gaze/Cargo.toml | head -n 1)
+          {
+            printf 'gaze_repository=%s\n' "$GAZE_COMPAT_REPOSITORY"
+            printf 'gaze_revision=%s\n' "$(git -C gaze-source rev-parse HEAD)"
+            printf 'gaze_version=%s\n' "$gaze_version"
+            printf 'node_revision=%s\n' "$(git rev-parse HEAD)"
+            printf 'node_version=%s\n' "$NODE_VERSION"
+            printf 'node_binary_sha256=%s\n' "$NODE_SHA256"
+            printf 'node_deb_sha256=%s\n' "$(sha256sum "$package" | cut -d' ' -f1)"
+            printf 'architecture=%s\n' "$(uname -m)"
+          } > "$RUNNER_TEMP/native/gaze-node-compatibility.txt"
+
       - name: Build and smoke tar archive
         shell: bash -euo pipefail {0}
         run: |
@@ -162,5 +219,6 @@ jobs:
             ${{ runner.temp }}/native/*.pkg.tar.zst
             ${{ runner.temp }}/native/*.tar.gz
             ${{ runner.temp }}/native/native-packages.sha256
+            ${{ runner.temp }}/native/gaze-node-compatibility.txt
           if-no-files-found: error
           retention-days: 90
