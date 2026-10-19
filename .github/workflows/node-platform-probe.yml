@@ -24,6 +24,10 @@ on:
 permissions:
   contents: read
 
+env:
+  GAZE_COMPAT_REPOSITORY: ${{ vars.GAZE_COMPAT_REPOSITORY || format('{0}/F1R3Gaze', github.repository_owner) }}
+  GAZE_COMPAT_REF: ${{ vars.GAZE_COMPAT_REF || 'main' }}
+
 concurrency:
   group: node-platform-probe-${{ github.ref }}
   cancel-in-progress: true
@@ -147,6 +151,95 @@ jobs:
         run: |
           version="$(sed -n '/^\[package\]/,/^\[/{s/^version = "\([^"]*\)"/\1/p;}' node/Cargo.toml | head -n 1)"
           packaging/macos/smoke.sh "$version" dist
+
+  macos-gaze-compat:
+    name: Packaged Node and Gaze macOS Compatibility (${{ matrix.arch }})
+    needs: macos-package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-14, arch: arm64 }
+          - { runner: macos-15-intel, arch: x86_64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Node source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Checkout Gaze for live compatibility smoke
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          repository: ${{ env.GAZE_COMPAT_REPOSITORY }}
+          ref: ${{ env.GAZE_COMPAT_REF }}
+          path: gaze-source
+          persist-credentials: false
+
+      - name: Download universal package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: f1r3node-macos-universal-packages
+          path: dist
+
+      - name: Install Rust for Gaze
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
+        with:
+          toolchain: 1.95.0
+
+      - name: Test installed Node with Gaze client
+        shell: bash -euo pipefail {0}
+        timeout-minutes: 20
+        run: |
+          version="$(sed -n '/^\[package\]/,/^\[/{s/^version = "\([^"]*\)"/\1/p;}' node/Cargo.toml | head -n 1)"
+          package="dist/f1r3node-$version-macos-universal.pkg"
+          (cd dist && shasum -a 256 -c "f1r3node-$version-macos-universal.sha256")
+          cleanup() {
+            if [[ -f "$HOME/Library/LaunchAgents/io.f1r3fly.f1r3node.plist" ]]; then
+              /usr/local/bin/f1r3node-service uninstall
+            fi
+          }
+          trap cleanup EXIT
+          sudo installer -pkg "$package" -target /
+          data_dir="$HOME/Library/Application Support/F1R3Node"
+          mkdir -p "$data_dir"
+          printf 'standalone = true\n' > "$data_dir/rnode.conf"
+          /usr/local/bin/f1r3node-service install
+          ready=0
+          for ((attempt = 0; attempt < 60; attempt++)); do
+            if /usr/local/bin/f1r3node-service status >/dev/null 2>&1 && curl --fail --silent --show-error --max-time 2 http://127.0.0.1:40403/status >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != 1 ]]; then
+            [[ ! -f "$data_dir/launchd.log" ]] || tail -n 100 "$data_dir/launchd.log"
+            exit 1
+          fi
+          F1R3NODE_BASE_URL=http://127.0.0.1:40403 \
+            cargo test --manifest-path gaze-source/f1r3-work/f1r3gaze/Cargo.toml \
+              --locked -p gaze-shard --test live_node -- --ignored
+          gaze_version=$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\([^"]*\)"/\1/p;}' gaze-source/f1r3-work/f1r3gaze/Cargo.toml | head -n 1)
+          {
+            printf 'gaze_repository=%s\n' "$GAZE_COMPAT_REPOSITORY"
+            printf 'gaze_revision=%s\n' "$(git -C gaze-source rev-parse HEAD)"
+            printf 'gaze_version=%s\n' "$gaze_version"
+            printf 'node_revision=%s\n' "$(git rev-parse HEAD)"
+            printf 'node_version=%s\n' "$version"
+            printf 'node_binary_sha256=%s\n' "$(shasum -a 256 /usr/local/bin/f1r3node | cut -d' ' -f1)"
+            printf 'node_pkg_sha256=%s\n' "$(shasum -a 256 "$package" | cut -d' ' -f1)"
+            printf 'architecture=%s\n' "$(uname -m)"
+          } > "gaze-node-compatibility-$(uname -m).txt"
+
+      - name: Upload compatibility record
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: f1r3node-gaze-macos-${{ matrix.arch }}
+          path: gaze-node-compatibility-${{ matrix.arch }}.txt
+          if-no-files-found: error
+          retention-days: 90
 
   windows:
     name: Native Node Windows x64 Diagnostic
