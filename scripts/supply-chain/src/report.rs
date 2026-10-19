@@ -11,25 +11,40 @@ pub struct Report {
     pub encountered: BTreeSet<String>,
 }
 
-fn advisory(
+fn reviewed_diagnostic(
     fields: &Map<String, Value>,
     exceptions: &BTreeMap<String, Exception>,
     result: &mut Report,
 ) {
-    let Some(advisory) = fields.get("advisory") else {
+    let yanked = fields.get("code").and_then(Value::as_str) == Some("yanked-ignored");
+    let id = if yanked {
+        fields
+            .get("labels")
+            .and_then(Value::as_array)
+            .and_then(|labels| {
+                labels.iter().find_map(|label| {
+                    (label.get("message").and_then(Value::as_str) == Some("yanked ignore"))
+                        .then(|| label.get("span").and_then(Value::as_str))
+                        .flatten()
+                })
+            })
+    } else if let Some(advisory) = fields.get("advisory") {
+        advisory.get("id").and_then(Value::as_str)
+    } else {
         return;
     };
-    let Some(id) = advisory
-        .get("id")
-        .and_then(Value::as_str)
-        .filter(|id| !id.is_empty())
-    else {
+    let Some(id) = id.filter(|id| !id.is_empty()) else {
         result
             .errors
-            .push("The scanner produced an invalid advisory record.".into());
+            .push("The scanner produced an invalid reviewed exception record.".into());
         return;
     };
     let Some(exception) = exceptions.get(id) else {
+        if yanked {
+            result
+                .errors
+                .push(format!("{id}: the yanked crate has no reviewed exception."));
+        }
         return;
     };
     result.encountered.insert(id.into());
@@ -57,7 +72,7 @@ fn advisory(
                 .is_some_and(|v| exception.versions.iter().any(|allowed| allowed == v))
         {
             result.errors.push(format!(
-                "{id}: the advisory exception does not cover this package version."
+                "{id}: the reviewed exception does not cover this package version."
             ));
         }
     }
@@ -98,7 +113,7 @@ pub fn validate(text: &str, exceptions: &BTreeMap<String, Exception>) -> Report 
                     .unwrap_or("scanner failure")
             ));
         }
-        advisory(fields, exceptions, &mut result);
+        reviewed_diagnostic(fields, exceptions, &mut result);
     }
     match summary {
         Some(summary)

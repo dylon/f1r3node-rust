@@ -103,7 +103,7 @@ jq -e --arg sha "$SOURCE_SHA" --arg digest "$INDEX_DIGEST" --arg tag "$CANDIDATE
 cmp "$PLAN" "$TMP/plan-repeat.json"
 
 # --- Resume: existing objects that match are skipped -----------------------
-state "{stable_tags: [\"v0.4.45\", \"v0.4.46\"], stable_tag: {sha: \"$SOURCE_SHA\"}, stable_release: {prerelease: false, assets: [\"f1r3node-linux-amd64\", \"f1r3node-linux-arm64\", \"checksums.txt\", \"release-evidence.json\", \"gate-report.json\", \"stable-release-evidence.json\", \"stable-release-evidence.json.sha256\"]},
+state "{stable_tags: [\"v0.4.45\", \"v0.4.46\"], stable_tag: {sha: \"$SOURCE_SHA\"}, stable_release: {prerelease: false, assets: [\"f1r3node-linux-amd64\", \"f1r3node-linux-arm64\", \"checksums.txt\", \"release-evidence.json\", \"gate-report.json\", \"stable-release-evidence.json\", \"stable-release-evidence.json.sha256\", \"native-packages.sha256\"]},
 	registry: {stable_tag_digest: \"$INDEX_DIGEST\", latest_digest: \"$INDEX_DIGEST\"}, ocir: {stable_tag_digest: \"$INDEX_DIGEST\", latest_digest: \"$INDEX_DIGEST\"}}" >"$TMP/resume.json"
 "$TOOL" plan "$EVIDENCE" "$REPORT" "$TMP/resume.json" "$TMP/resume-plan.json" 2>/dev/null
 jq -e '.actions == {create_tag: false, create_release: false, copy_image: false, move_latest: false, copy_image_ocir: false, move_latest_ocir: false, open_next_version_pr: true}' "$TMP/resume-plan.json" >/dev/null

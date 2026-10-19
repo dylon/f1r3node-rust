@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+label=io.f1r3fly.f1r3node
+agent="$HOME/Library/LaunchAgents/$label.plist"
+template=/usr/local/share/f1r3node/launchd.plist
+domain="gui/$(id -u)"
+data_dir="$HOME/Library/Application Support/F1R3Node"
+
+service_loaded() {
+  launchctl print "$domain/$label" >/dev/null 2>&1
+}
+
+wait_unloaded() {
+  for ((attempt = 0; attempt < 50; attempt++)); do
+    if ! service_loaded; then return 0; fi
+    sleep 0.1
+  done
+  echo "service did not finish unloading" >&2
+  return 1
+}
+
+case "${1:-}" in
+  install)
+    [[ ! -e "$agent" ]] || { echo "service is already installed" >&2; exit 2; }
+    [[ -s "$data_dir/rnode.conf" ]] || { echo "create $data_dir/rnode.conf with a standalone or bootstrap configuration before enabling the service" >&2; exit 2; }
+    mkdir -p "$(dirname "$agent")" "$data_dir"
+    cp "$template" "$agent"
+    if ! launchctl bootstrap "$domain" "$agent"; then
+      rm -f "$agent"
+      exit 1
+    fi
+    ;;
+  start)
+    [[ -f "$agent" ]] || { echo "install the service first" >&2; exit 2; }
+    if service_loaded; then
+      if launchctl kickstart -k "$domain/$label"; then exit 0; fi
+      if service_loaded; then exit 1; fi
+    fi
+    launchctl bootstrap "$domain" "$agent"
+    ;;
+  stop)
+    launchctl bootout "$domain/$label"
+    wait_unloaded
+    ;;
+  status)
+    launchctl print "$domain/$label"
+    ;;
+  uninstall)
+    [[ -f "$agent" ]] || { echo "service is not installed" >&2; exit 2; }
+    if service_loaded; then
+      launchctl bootout "$domain/$label"
+      wait_unloaded
+    fi
+    rm -f "$agent"
+    ;;
+  run)
+    mkdir -p "$data_dir"
+    exec /usr/local/bin/f1r3node run --data-dir="$data_dir" --api-host=127.0.0.1 --no-upnp >> "$data_dir/launchd.log" 2>&1
+    ;;
+  *)
+    echo "usage: f1r3node-service install|start|stop|status|uninstall" >&2
+    exit 2
+    ;;
+esac

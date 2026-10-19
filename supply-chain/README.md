@@ -11,6 +11,7 @@ The pre-commit hook runs only `cargo deny check`, which reads `deny.toml`. It do
 | `manifests` | The Cargo manifests that the check scans: the workspace, `fuzz/`, and `scripts/soak-charts/`. |
 | `[scanner]` | The pinned `cargo-deny` version and the sha256 of each release binary. |
 | `[exceptions.<advisory>]` | One record for each RustSec advisory that the check accepts for a time. |
+| `[exceptions."crate@version"]` | One record for each yanked crate version that the check accepts for a time. |
 
 Each exception record has these fields:
 
@@ -18,11 +19,11 @@ Each exception record has these fields:
 - `owner`: the team that reviews the exception.
 - `review-by`: the date of the next review.
 
-Each exception must also appear in `advisories.ignore` in `deny.toml` with a reason. The checker refuses a policy when the two lists differ.
+Each exception must also appear in `advisories.ignore` in `deny.toml` with a reason. Use `id` for an advisory and `crate` for a yanked version. The checker refuses a policy when the two lists differ.
 
 ## Exception lifecycle
 
-An exception is temporary. It records a known advisory that the project cannot fix yet, and the reason why.
+An exception is temporary. It records a known advisory or yanked version that the project cannot replace yet, and the reason why.
 
 - The `review-by` date must be after the current UTC date. On the `review-by` date itself, the check fails on every branch and in the merge queue.
 - The check fails at 00:00 UTC on that date, which is the previous evening in the Americas.
