@@ -8,7 +8,7 @@ expected_sha=$3
 project=$(cd "$(dirname "$0")/../.." && pwd)
 
 sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
-pacman -Sy --noconfirm
+pacman -Syu --noconfirm
 pacman -S --noconfirm --needed glibc gcc-libs openssl zlib brotli zstd systemd
 useradd --create-home --shell /bin/bash node-builder
 mkdir -p /tmp/node-arch-output
